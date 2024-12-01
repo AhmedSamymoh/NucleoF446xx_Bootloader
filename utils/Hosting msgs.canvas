@@ -1,0 +1,10 @@
+{
+	"nodes":[
+		{"id":"bf09cf759eaf3447","type":"text","text":"\n\n\n\n\nHost","x":-125,"y":-30,"width":105,"height":70,"color":"4"},
+		{"id":"ab10e2e76a6fc6ba","type":"text","text":"Target (MCU)","x":200,"y":-30,"width":140,"height":70,"color":"4"}
+	],
+	"edges":[
+		{"id":"c0a32d0dda54cfe9","fromNode":"bf09cf759eaf3447","fromSide":"right","toNode":"ab10e2e76a6fc6ba","toSide":"left","label":"CMD Packet"},
+		{"id":"e65cf9ae3fa6998e","fromNode":"ab10e2e76a6fc6ba","fromSide":"bottom","toNode":"bf09cf759eaf3447","toSide":"bottom","label":"Response (Ack/Len to follow)"}
+	]
+}
