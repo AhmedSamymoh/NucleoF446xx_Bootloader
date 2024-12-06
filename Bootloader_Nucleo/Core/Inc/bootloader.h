@@ -1,4 +1,4 @@
-/*
+/**
  * @file     bootloader.h
  * @date     Nov 22, 2024
  * @author   Ahmed Samy
@@ -46,6 +46,11 @@ typedef enum{
 	SECTOR_WR_PROTECTION
 } BL_Sector_Protection_Mode_t;
 
+typedef enum{
+	ERASE_FLAG_UNFOUND,
+	ERASE_FLAG_FOUND
+} BL_EraseFlag_t;
+
 typedef void (*pMainApp)(void);
 
 /****************************************** Section: Macro Declarations ****************************************/
@@ -84,9 +89,16 @@ typedef void (*pMainApp)(void);
 * BL_VersionInfo
 */
 #define BL_SW_vendor_ID        		   1u
-#define BL_SW_major_version    		   1u
-#define BL_SW_minor_version    		   1u
+#define BL_SW_major_version    		   2u
+#define BL_SW_minor_version    		   2u
 #define BL_SW_patch_version    		   1u
+
+/*
+* BL FLAG
+*/
+#define ERASE_FLAG_ADDR    			   0x0807FFF0
+#define ERASE_FLAG_SET     			   0x74747474
+#define ERASE_FLAG_CLEARED 			   0xFFFFFFFF
 
 /*
 * to Get ChipID

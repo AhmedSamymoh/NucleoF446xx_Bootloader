@@ -1,4 +1,4 @@
-/*
+/**
  * @file     bootloader.c
  * @date     Nov 22, 2024
  * @author   Ahmed Samy
@@ -22,17 +22,20 @@ static uint8 u8VerifyCRC(uint8 * copy_pu8DataArr, uint8 copy_u8Length, uint32 co
 static BL_Address_Status_t ValidateAddress(uint32 u32Address);
 static void voidSendAck(uint8 copy_u8ReplyLength);
 static void voidSendNotAck(void);
-static uint8 u8Execute_FlashErase(uint8 copy_u8SectorNumber, uint8 copy_u8NumberOfSectors);
+static HAL_StatusTypeDef u8Execute_FlashErase(uint8 copy_u8SectorNumber, uint8 copy_u8NumberOfSectors);
 static uint8 u8Execute_MemoryWrite(uint8 * Copy_pu8Buffer, uint32 Copy_u32Address, uint8 Copy_u8Length);
-
-
+static void voidSet_EraseFlag(void);
+static BL_EraseFlag_t VerfiyErase_Flag(void);
 
 /**************************************** Section : Functions Definition ***************************************/
 
-/*s
- * @brief Sending Packet for the following CMD GetVersion to get the version of the bootloader
+/**
+ * @brief Handles the GetVersion command to send the bootloader version to the host.
  * 
- * @param copy_pu8CmdPacket 
+ * @param copy_pu8CmdPacket Pointer to the command packet containing:
+ *        - [0]: Command length
+ *        - [1]: Command identifier
+ *        - [2-5]: CRC (4 bytes)
  */
 void BL_voidHandle_GetVersion_CMD(uint8 * copy_pu8CmdPacket){
 	uint8 BL_version[4] = {BL_SW_vendor_ID, BL_SW_major_version, BL_SW_minor_version ,BL_SW_patch_version};
@@ -41,7 +44,6 @@ void BL_voidHandle_GetVersion_CMD(uint8 * copy_pu8CmdPacket){
 	
 	CmdLen = copy_pu8CmdPacket[0]+1;
 
-	/*cmd len | cmd | ... | CRC (last 4 bytes)|*/
 	Host_CRC =  *((uint32 *)(copy_pu8CmdPacket + CmdLen - 4));
 
 	CRCStatus = u8VerifyCRC(copy_pu8CmdPacket , ( CmdLen - 4) , Host_CRC );
@@ -55,9 +57,13 @@ void BL_voidHandle_GetVersion_CMD(uint8 * copy_pu8CmdPacket){
 }
 
 /**
- * @brief Sending Packet for the Supported bootloader commands
- *
- * @param copy_pu8CmdPacket
+ * @brief Handles the GetHelp command to send a list of supported bootloader commands to the host.
+ * 
+ * @param copy_pu8CmdPacket Pointer to the command packet containing:
+ *        - [0]: Command length
+ *        - [1]: Command identifier
+ *        - [2-5]: CRC (4 bytes)
+ * 
  */
 void BL_voidHandle_GetHelp_CMD(uint8 * copy_pu8CmdPacket){
 	uint8 CRCStatus, CmdLen;
@@ -93,6 +99,14 @@ void BL_voidHandle_GetHelp_CMD(uint8 * copy_pu8CmdPacket){
 
 }
 
+/**
+ * @brief Handles the GetChipID command to retrieve the unique device identifier (Device ID).
+ * 
+ * @param copy_pu8CmdPacket Pointer to the command packet containing:
+ *        - [0]: Command length
+ *        - [1]: Command identifier
+ *        - [2-5]: CRC (4 bytes)
+ */
 void BL_voidHandle_GetChipID_CMD(uint8 * copy_pu8CmdPacket){
 	uint8 CRCStatus, CmdLen;
 	uint32 Host_CRC ;
@@ -115,6 +129,16 @@ void BL_voidHandle_GetChipID_CMD(uint8 * copy_pu8CmdPacket){
 	}
 }
 
+
+/**
+ * @brief Handles the "Get RDP Status" command, which retrieves the current Readout Protection (RDP) status.
+ * 
+ * @param copy_pu8CmdPacket Pointer to the command packet containing:
+ *        - [0]: Command length
+ *        - [1]: Command identifier
+ *        - [2-5]: RDP user option word (for checking status)
+ *        - [6-9]: CRC (4 bytes)
+ */
 void BL_voidHandle_GetRDPStatus_CMD(uint8 * copy_pu8CmdPacket){
 	uint8 CRCStatus, CmdLen;
 	uint32 Host_CRC ;
@@ -135,6 +159,16 @@ void BL_voidHandle_GetRDPStatus_CMD(uint8 * copy_pu8CmdPacket){
 	}
 }
 
+
+/**
+ * @brief Handles the "Go To Address" bootloader command, which jumps to a specific address provided by the host.
+ *
+ * @param copy_pu8CmdPacket Pointer to the command packet containing:
+ *   - [0]: Command length
+ *   - [1]: Command identifier
+ *   - [2-5]: Target address to jump to (4 bytes)
+ *   - [6-9]: CRC (4 bytes)
+ */
 void BL_voidHandle_GoToAddress_CMD(uint8 * copy_pu8CmdPacket){
 	uint8 CRCStatus, CmdLen;
 	uint32 Host_CRC ;
@@ -174,10 +208,24 @@ void BL_voidHandle_GoToAddress_CMD(uint8 * copy_pu8CmdPacket){
 	}
 }
 
+/**
+ * @brief Handles the flash erase command, validating CRC, initiating sector erase, 
+ *        and verifying the erase flag.
+ * 
+ * @param copy_pu8CmdPacket Pointer to the command packet containing:
+ *  	  - [0]: Command length
+ *        - [1]: Command identifier
+ *        - [2]: Sector number (1 byte)
+ *        - [3]: Number of sectors (1 byte)
+ *        - [4-8]: CRC (4 bytes)
+ * 
+ */
 void BL_voidHandle_FlashErase_CMD(uint8 * copy_pu8CmdPacket){
 	uint8 CRCStatus, CmdLen;
 	uint32 Host_CRC ;
-	uint8 EraseStatus, SectorNumber, NumberOfSectors;
+	HAL_StatusTypeDef EraseStatus;
+	uint8 SectorNumber, NumberOfSectors;
+	BL_EraseFlag_t EraseFlash_Status = ERASE_FLAG_UNFOUND;
 
 	CmdLen = copy_pu8CmdPacket[0]+1;
 
@@ -190,20 +238,49 @@ void BL_voidHandle_FlashErase_CMD(uint8 * copy_pu8CmdPacket){
 
 	if(CRCStatus == CRC_VERIFING_PASS){
 		voidSendAck(1);
+
 		/*Toggling led while Erasing*/
 		HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
+
 		/*Start Erasing Initialization*/
 		EraseStatus = u8Execute_FlashErase(SectorNumber, NumberOfSectors);
+		
+		/*Flashing Erase Flag*/
+		voidSet_EraseFlag();
+
+		/*Verfiy if Erase Flag been written*/
+		EraseFlash_Status = VerfiyErase_Flag();
+
+		if(EraseFlash_Status == ERASE_FLAG_FOUND){
+			/*Sending the HAL_ErrorStatus*/
+			HAL_UART_Transmit(&huart2,&EraseStatus,1, HAL_MAX_DELAY);
+		}else{
+			voidSendNotAck();
+		}
 
 		HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
 
-		/*Sending the HAL_ErrorStatus*/
-		HAL_UART_Transmit(&huart2,&EraseStatus,1, HAL_MAX_DELAY);
 	}else{
 		voidSendNotAck();
 	}
 }
 
+
+
+/**
+ * @brief Handles the memory write command from the host, validating CRC, address, and payload, 
+ *        and writes data to the specified memory location.
+ * 
+ * @param copy_pu8CmdPacket Pointer to the command packet received from the host.
+ *        The packet structure includes:
+ *        - [0]: Command length
+ *        - [1]: Command identifier
+ *        - [2-5]: Base address (4 bytes)
+ *        - [6]: Payload length (1 byte)
+ *        - [7-N]: Payload data
+ *        - [N+1-N+4]: CRC (4 bytes)
+ * 
+ */
 void BL_voidHandle_MemoryWrite_CMD(uint8 * copy_pu8CmdPacket){
 	uint8 CRCStatus, CmdLen;
 	uint32 Host_CRC ;
@@ -241,6 +318,8 @@ void BL_voidHandle_MemoryWrite_CMD(uint8 * copy_pu8CmdPacket){
 		voidSendNotAck();
 	}
 }
+
+
 
 void BL_voidHandle_EnableRWProtect_CMD(uint8 * copy_pu8CmdPacket){
 	uint8 CRCStatus, CmdLen;
@@ -301,25 +380,24 @@ void BL_voidHandle_ReadSectorStatus_CMD(uint8 * copy_pu8CmdPacket){
 void BL_voidHandle_OTPRead_CMD(uint8 * copy_pu8CmdPacket){
 }
 
-/**
- * @brief 
- * 
- * @param copy_pu8CmdPacket 
- */
 void BL_voidHandle_DisableRWProtect_CMD(uint8 * copy_pu8CmdPacket){
 
 }
 
 
-
+/****************************************************************************************************************/
+/************************************ Section : Local Functions Implementation **********************************/
+/****************************************************************************************************************/
 
 /**
- * @brief 
+ * @brief Verifies the CRC of a given data array against the host-provided CRC.
  * 
- * @param copy_pu8DataArr 
- * @param copy_u8Length 
- * @param copy_u32HostCRC 
- * @return uint8 
+ * @param copy_pu8DataArr Pointer to the data array to validate.
+ * @param copy_u8Length Length of the data array.
+ * @param copy_u32HostCRC Host-provided CRC value for comparison.
+ * @return uint8 Status of CRC verification:
+ *         - CRC_VERIFING_PASS if CRC matches.
+ *         - CRC_VERIFING_FAILED otherwise.
  */
 static uint8 u8VerifyCRC(uint8 * copy_pu8DataArr, uint8 copy_u8Length, uint32 copy_u32HostCRC){
     uint8 Local_u8CRCStatus = CRC_VERIFING_FAILED;
@@ -367,7 +445,14 @@ static void voidSendNotAck(void){
 	HAL_UART_Transmit(&huart2, &Local_u8NAck ,2 ,HAL_MAX_DELAY);
 }
 
-/***/
+
+/** @brief Validates whether a given address falls within the permissible memory regions.
+ * 
+ * @param u32Address The 32-bit address to validate.
+ * @return BL_Address_Status_t 
+ *         - Address_VALID if the address is within the Flash or SRAM regions.
+ *         - Address_INVALID otherwise.
+ */
 static BL_Address_Status_t ValidateAddress(uint32 u32Address){
 	BL_Address_Status_t Address_Status;
 	/*Address is VALID if it is within : SRAM or FLASH*/
@@ -383,11 +468,13 @@ static BL_Address_Status_t ValidateAddress(uint32 u32Address){
 	return Address_Status;
 }
 
-static uint8 u8Execute_FlashErase(uint8 copy_u8SectorNumber, uint8 copy_u8NumberOfSectors){
+//
+static HAL_StatusTypeDef u8Execute_FlashErase(uint8 copy_u8SectorNumber, uint8 copy_u8NumberOfSectors){
 
 	HAL_StatusTypeDef ErrorStatus = HAL_OK;
 	uint32_t SectorError;
 	FLASH_EraseInitTypeDef Flash_Erase;
+	uint32 EraseFlag_Value;
 
 	if((copy_u8SectorNumber > 8) & (copy_u8SectorNumber != 0xff)){
 		ErrorStatus = HAL_ERROR;
@@ -416,10 +503,22 @@ static uint8 u8Execute_FlashErase(uint8 copy_u8SectorNumber, uint8 copy_u8Number
 		HAL_FLASH_Unlock();
 		/*Start Erasing*/
 		ErrorStatus = HAL_FLASHEx_Erase(&Flash_Erase, &SectorError);
+
 	}
 	return ErrorStatus;
 }
 
+
+/**
+ * @brief Executes memory write operation either in FLASH or SRAM based on the provided address.
+ * 
+ * @param Copy_pu8Buffer Pointer to the buffer containing data to be written to memory.
+ * @param Copy_u32Address The target memory address to which data will be written.
+ * @param Copy_u8Length The length of the data to be written (in bytes).
+ * 
+ * @return uint8 The status of the memory write operation (HAL_OK if successful) @HAL_StatusTypeDef
+ * 
+ */
 static uint8 u8Execute_MemoryWrite(uint8 * Copy_pu8Buffer, uint32 Copy_u32Address, uint8 Copy_u8Length){
 	HAL_StatusTypeDef ErrorStatus = HAL_OK;
 
@@ -446,4 +545,38 @@ static uint8 u8Execute_MemoryWrite(uint8 * Copy_pu8Buffer, uint32 Copy_u32Addres
 	}
 
 	return ErrorStatus;
+}
+
+
+/**
+ * @brief Sets the erase flag by writing a predefined value to the erase flag memory location.
+ * 
+ */
+static void voidSet_EraseFlag(void){
+	uint8 EraseFlag[] = {0x74,0x74,0x74,0x74};
+	u8Execute_MemoryWrite(EraseFlag, ERASE_FLAG_ADDR, 4);
+
+}
+
+
+/**
+ * @brief Verifies if the erase flag has been set at the specified memory location.
+ * 
+ * @return BL_EraseFlag_t 
+ *         - ERASE_FLAG_FOUND if the flag value matches `ERASE_FLAG_SET`.
+ *         - ERASE_FLAG_UNFOUND if the flag value does not match `ERASE_FLAG_SET
+ * 
+ */
+static BL_EraseFlag_t VerfiyErase_Flag(void){
+	BL_EraseFlag_t status = ERASE_FLAG_UNFOUND;
+	uint32 EraseFlag_Value;
+
+	EraseFlag_Value = *((volatile uint32*)ERASE_FLAG_ADDR);
+
+	if(EraseFlag_Value == ERASE_FLAG_SET){
+		status = ERASE_FLAG_FOUND;
+	}else{
+		status = ERASE_FLAG_UNFOUND;
+	}
+	return status;
 }
