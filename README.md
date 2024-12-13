@@ -1,6 +1,7 @@
 # NucleoF446xx_Bootloader
 A bootloader for STM32F4 stored in Flash memory enabling firmware update, with implemented commands for memory operations, address jumps, and communication via CRC-validated command packets.
 
+
 ### For STM32F4:
 - You can not store bootloader at the Rom(system memory) where ST's Bootloader stored
 - so we can use Flash memory itself to store our bootloader
