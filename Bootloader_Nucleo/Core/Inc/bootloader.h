@@ -6,6 +6,16 @@
  * @version info : Platform : stm32f446re, IDE : STM32CubeIDE, Compiler : Arm Compiler 6
  *
  * @copyright Alexandria University Copyright (c) 2024
+ * 
+ * @details  STM32F446RE Flash Memory Layout:
+ *           <Sector 0>: 16 KB  (0x08000000 - 0x08003FFF) - Bootloader
+ *           <Sector 1>: 16 KB  (0x08004000 - 0x08007FFF) - Bootloader
+ *           <Sector 2>: 16 KB  (0x08008000 - 0x0800BFFF) - Application
+ *           <Sector 3>: 16 KB  (0x0800C000 - 0x0800FFFF) - Application
+ *           <Sector 4>: 64 KB  (0x08010000 - 0x0801FFFF) - Application
+ *           <Sector 5>: 128 KB (0x08020000 - 0x0803FFFF) - Application
+ *           <Sector 6>: 128 KB (0x08040000 - 0x0805FFFF) - Application
+ *           <Sector 7>: 128 KB (0x08060000 - 0x0807FFFF) - Application
  *
  */
 
@@ -96,7 +106,7 @@ typedef void (*pMainApp)(void);
 /*
 * BL FLAG
 */
-#define ERASE_FLAG_ADDR    			   0x0807FFF0
+#define ERASE_FLAG_ADDR    			   0x08007FF0
 #define ERASE_FLAG_SET     			   0x74747474
 #define ERASE_FLAG_CLEARED 			   0xFFFFFFFF
 
