@@ -19,4 +19,4 @@ jobs:
         uses: xanderhendriks/action-build-stm32cubeide@v10.0
         with:
           project-path: 'NucleoF446xx_Bootloader/Bootloader_Nucleo'
-          project-target: 'Bootloader_Nucleo/Debug'  # Adjust this to your actual target configuration
+          project-target: 'Bootloader_Nucleo'  # Adjust this to your actual target configuration
