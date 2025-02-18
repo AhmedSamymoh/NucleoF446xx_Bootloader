@@ -1,37 +1,22 @@
-name: Build Bootloader
+name: Build STM32CubeIDE Project
 
 on:
   push:
     branches:
-      - main
-      - develop
+      - main  # or specify the branch you want to trigger the build on
   pull_request:
     branches:
-      - main
+      - main  # or specify the target branch for PRs
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-      # Checkout the repository
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v2
 
-      # Set up STM32CubeIDE
-      - name: Set up STM32CubeIDE
-        uses: docker://xanderhendriks/stm32cubeide:latest
-
-      # Build Bootloader
-      - name: Build Bootloader for Nucleo-F446RE
-        run: |
-          cd Bootloader_Nucleo
-          # Use STM32CubeIDE CLI to build the project
-          ./stm32cubeide --build Bootloader_Nucleo.ioc
-
-      # Upload Build Artifacts
-      - name: Upload Build Artifacts
-        uses: actions/upload-artifact@v3
+      - name: Set up STM32CubeIDE Docker image
+        uses: xanderhendriks/action-build-stm32cubeide@v10.0
         with:
-          name: bootloader_firmware
-          path: Bootloader_Nucleo/Debug/*.elf # You can customize this path as needed for your project
+          project-path: 'Bootloader/NucleoF446xx_Bootloader/Bootloader_Nucleo'
+          project-target: 'Bootloader_Nucleo/Debug'  # Adjust this to your actual target configuration
