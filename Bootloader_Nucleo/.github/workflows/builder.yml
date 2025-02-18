@@ -20,9 +20,7 @@ jobs:
 
       # Set up STM32CubeIDE
       - name: Set up STM32CubeIDE
-        uses: actions/setup-docker@v3
-        with:
-          docker-image: xanderhendriks/stm32cubeide:latest
+        uses: docker://xanderhendriks/stm32cubeide:latest
 
       # Build Bootloader
       - name: Build Bootloader for Nucleo-F446RE
