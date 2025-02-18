@@ -1,0 +1,39 @@
+name: Build Bootloader
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout the repository
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # Set up STM32CubeIDE
+      - name: Set up STM32CubeIDE
+        uses: actions/setup-docker@v3
+        with:
+          docker-image: xanderhendriks/stm32cubeide:latest
+
+      # Build Bootloader
+      - name: Build Bootloader for Nucleo-F446RE
+        run: |
+          cd Bootloader_Nucleo
+          # Use STM32CubeIDE CLI to build the project
+          ./stm32cubeide --build Bootloader_Nucleo.ioc
+
+      # Upload Build Artifacts
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: bootloader_firmware
+          path: Bootloader_Nucleo/Debug/*.elf # You can customize this path as needed for your project
